@@ -19,6 +19,10 @@
       --btn-border: #444;
       --btn-color: #ccc;
       --btn-hover-bg: #3a3a3a;
+      --modal-bg: rgba(0,0,0,0.75);
+      --modal-fg: #f0f0f0;
+      --modal-btn-bg: #444;
+      --modal-btn-hover: #555;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -28,7 +32,6 @@
       height: 100vh;
       display: flex;
       overflow: hidden;
-      user-select: none;
     }
     body::before {
       content: "";
@@ -70,8 +73,7 @@
     #add-template-btn {
       background:var(--btn-bg); border:1px solid var(--btn-border);
       color:var(--btn-color); border-radius:var(--radius);
-      padding:.6em 1em; font-size:1em; cursor:pointer;
-      margin-left:.5rem; user-select:none;
+      padding:.6em 1em; cursor:pointer; margin-left:.5rem;
     }
     #add-template-btn:hover { background:var(--btn-hover-bg); }
     #tree { list-style:none; flex-grow:1; margin-bottom:1rem; }
@@ -96,13 +98,12 @@
       color:var(--btn-color); cursor:pointer; margin-left:.3em;
     }
     .controls button:hover { color:var(--accent); }
-    button {
+    button.action {
       background:var(--btn-bg); border:1px solid var(--btn-border);
       color:var(--btn-color); border-radius:var(--radius);
-      padding:.6em 1.5em; font-size:1em; cursor:pointer;
-      margin:0.3rem 0; user-select:none;
+      padding:.6em 1.5em; cursor:pointer; margin:0.3rem 0;
     }
-    button:hover { background:var(--btn-hover-bg); }
+    button.action:hover { background:var(--btn-hover-bg); }
     input[type="file"] { display:none; }
     .children { list-style:none; padding-left:1.5em; }
     #editor-container { flex-grow:1; display:flex; flex-direction:column; }
@@ -112,8 +113,7 @@
       padding:.5em; font-family:monospace; margin-bottom:.5rem;
     }
     #extension-label {
-      margin-left:.5em; color:#888;
-      font-family:monospace;
+      margin-left:.5em; color:#888; font-family:monospace;
     }
     textarea#editor {
       flex-grow:1; resize:both; background:#111;
@@ -130,6 +130,27 @@
       max-width:100%; border:var(--border-width) solid #444;
       border-radius:var(--radius); margin-bottom:.5rem;
     }
+    /* モーダル */
+    #confirm-modal {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background:var(--modal-bg); display:none;
+      align-items:center; justify-content:center; z-index:1000;
+    }
+    #confirm-box {
+      background:#222; color:var(--modal-fg);
+      padding:1rem 1.5rem; border-radius:var(--radius);
+      text-align:center; max-width:300px; width:80%;
+    }
+    #confirm-box p {
+      margin-bottom:1rem; font-size:0.9em;
+    }
+    .modal-btn {
+      background:var(--modal-btn-bg); border:none;
+      color:var(--modal-fg); padding:.5em 1em;
+      margin:0 .5em; border-radius:var(--radius);
+      cursor:pointer; font-size:0.9em;
+    }
+    .modal-btn:hover { background:var(--modal-btn-hover); }
   </style>
 </head>
 <body>
@@ -138,11 +159,11 @@
       <select id="template-select">
         <option value="">テンプレート選択...</option>
       </select>
-      <button id="add-template-btn">テンプレート追加</button>
+      <button id="add-template-btn" class="action">テンプレート追加</button>
     </div>
     <ul id="tree"></ul>
-    <button id="import-btn">ファイルをインポート</button>
-    <button id="download-btn">ZIP ダウンロード</button>
+    <button id="import-btn" class="action">ファイルをインポート</button>
+    <button id="download-btn" class="action">ZIP ダウンロード</button>
     <input type="file" id="file-input" multiple />
   </div>
   <div id="dragbar"></div>
@@ -157,7 +178,15 @@
       <video id="video-player" controls style="display:none; max-height:300px;"></video>
       <img id="image-viewer" style="display:none;" />
       <textarea id="editor" placeholder="編集可能なテキストエリア" disabled></textarea>
-      <button id="save-btn" disabled>保存</button>
+      <button id="save-btn" class="action" disabled>保存</button>
+    </div>
+  </div>
+
+  <div id="confirm-modal">
+    <div id="confirm-box">
+      <p>保存されていない変更があります。移動してもよろしいですか？</p>
+      <button id="confirm-yes" class="modal-btn">はい</button>
+      <button id="confirm-no" class="modal-btn">いいえ</button>
     </div>
   </div>
 
@@ -174,6 +203,11 @@
     const extensionLabel = document.getElementById('extension-label');
     const editor = document.getElementById('editor');
     const saveBtn = document.getElementById('save-btn');
+    const tplSelect = document.getElementById('template-select');
+    const tplBtn = document.getElementById('add-template-btn');
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmYes = document.getElementById('confirm-yes');
+    const confirmNo = document.getElementById('confirm-no');
     const leftPanel = document.getElementById('leftPanel');
     const rightPanel = document.getElementById('rightPanel');
     const dragbar = document.getElementById('dragbar');
@@ -182,17 +216,17 @@
     const videoPlayer = document.getElementById('video-player');
     const imageViewer = document.getElementById('image-viewer');
     const ctx = waveformCanvas.getContext('2d');
-    const tplSelect = document.getElementById('template-select');
-    const tplBtn = document.getElementById('add-template-btn');
 
     let activeFolderNode = null;
     let activeFileNode = null;
+    let lastSaved = { name: '', content: '' };
+    let pendingAction = null;
     let isDragging = false;
     let fileBlobs = new Map();
 
     const rootLi = addNode(tree, 'project', true, true);
     setActiveFolder(rootLi);
-    
+
     if (window.TEMPLATES) {
       for (const key in TEMPLATES) {
         const opt = document.createElement('option');
@@ -205,37 +239,61 @@
     tplBtn.addEventListener('click', () => {
       const tplKey = tplSelect.value;
       if (!tplKey || !window.TEMPLATES[tplKey]) {
-        alert('テンプレートを選択してください。');
+        showToast('テンプレートを選択してください。');
         return;
       }
       if (!activeFolderNode) {
-        alert('フォルダを選択してください。');
+        showToast('フォルダを選択してください。');
         return;
       }
-      const tpl = window.TEMPLATES[tplKey];
-      tpl.files.forEach(file => {
+      TEMPLATES[tplKey].files.forEach(file => {
         const li = addNode(activeFolderNode.querySelector('.children'), file.name, false, false);
         li.dataset.content = file.content;
       });
     });
 
-    document.addEventListener('focusin', e => {
-      if (e.target.classList.contains('name')) e.target.dataset.prev = e.target.value;
-    });
-    document.addEventListener('change', e => {
-      if (e.target.classList.contains('name')) {
-        const input = e.target;
-        const parent = input.closest('.children') || tree;
-        const vals = [...parent.querySelectorAll(':scope>.node .name')].map(n=>n.value.trim());
-        if (vals.filter(v=>v===input.value.trim()).length>1) {
-          alert('同じ名前があります。元に戻します。');
-          input.value = input.dataset.prev;
-        }
+    function maybeSwitchNode(action) {
+      if (!activeFileNode) { action(); return; }
+      const currentName = filenameInput.value + extensionLabel.textContent;
+      const currentContent = editor.value;
+      if (currentName !== lastSaved.name || currentContent !== lastSaved.content) {
+        pendingAction = action;
+        confirmModal.style.display = 'flex';
+        return;
       }
+      action();
+    }
+    confirmYes.addEventListener('click', () => {
+      confirmModal.style.display = 'none';
+      if (pendingAction) pendingAction();
+      pendingAction = null;
+    });
+    confirmNo.addEventListener('click', () => {
+      confirmModal.style.display = 'none';
+      pendingAction = null;
     });
 
+    saveBtn.addEventListener('click', () => {
+      if (!activeFileNode) return;
+      applySave();
+      lastSaved = {
+        name: filenameInput.value + extensionLabel.textContent,
+        content: editor.value
+      };
+    });
+    function applySave() {
+      const ext = activeFileNode.dataset.ext;
+      if (isMediaExt(ext)) {
+        const base = filenameInput.value.trim();
+        activeFileNode.querySelector('.name').value = base + '.' + ext;
+      } else {
+        activeFileNode.querySelector('.name').value = filenameInput.value.trim();
+        activeFileNode.dataset.content = editor.value;
+      }
+    }
+
     importBtn.addEventListener('click', () => {
-      if (!activeFolderNode) { alert('フォルダを選択してください。'); return; }
+      if (!activeFolderNode) { showToast('フォルダを選択してください。'); return; }
       fileInput.click();
     });
     fileInput.addEventListener('change', e => {
@@ -256,18 +314,6 @@
       fileInput.value = '';
     });
 
-    saveBtn.addEventListener('click', () => {
-      if (!activeFileNode) return;
-      const ext = activeFileNode.dataset.ext;
-      if (isMediaExt(ext)) {
-        const base = filenameInput.value.trim();
-        activeFileNode.querySelector('.name').value = base + '.' + ext;
-      } else {
-        activeFileNode.querySelector('.name').value = filenameInput.value.trim();
-        activeFileNode.dataset.content = editor.value;
-      }
-    });
-
     downloadBtn.addEventListener('click', () => {
       const zip = new JSZip();
       (function walk(ul, dir) {
@@ -275,11 +321,9 @@
           const nm = li.querySelector('.name').value.trim();
           if (li.classList.contains('file')) {
             if (fileBlobs.has(li)) {
-              fetch(fileBlobs.get(li).url)
-                .then(r => r.blob())
-                .then(b => dir.file(nm, b));
+              fetch(fileBlobs.get(li).url).then(r=>r.blob()).then(b=>dir.file(nm, b));
             } else {
-              dir.file(nm, li.dataset.content || '');
+              dir.file(nm, li.dataset.content||'');
             }
           } else {
             const sub = dir.folder(nm);
@@ -305,28 +349,35 @@
       `;
       parent.appendChild(li);
       if (isFolder) {
-        li.addEventListener('click', e => { e.stopPropagation(); setActiveFolder(li); });
-        li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); addNode(li.querySelector('.children'),'new_folder',true,false); });
-        li.querySelector('.add-file').addEventListener('click', e => { e.stopPropagation(); addTextFile(li.querySelector('.children')); });
-        Sortable.create(li.querySelector('.children'),{group:'nested',animation:150,fallbackOnBody:true,swapThreshold:0.65});
+        li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => setActiveFolder(li)); });
+        li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addNode(li.querySelector('.children'),'new_folder',true,false)); });
+        li.querySelector('.add-file').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addTextFile(li.querySelector('.children'))); });
+        Sortable.create(li.querySelector('.children'), { group:'nested', animation:150, fallbackOnBody:true, swapThreshold:0.65 });
       }
       const d = li.querySelector('.delete');
-      if (d) d.addEventListener('click', e => { e.stopPropagation(); if(confirm('削除しますか？')) { if(activeFolderNode===li) activeFolderNode=null; li.remove(); } });
-      if (!isFolder) li.addEventListener('click', e => { e.stopPropagation(); displayFile(li); });
+      if (d) d.addEventListener('click', e => {
+        e.stopPropagation();
+        if (confirm('削除しますか？')) {
+          if (activeFolderNode === li) setActiveFolder(rootLi);
+          li.remove();
+        }
+      });
+      if (!isFolder) {
+        li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => displayFile(li)); });
+      }
       return li;
     }
 
     function isTextExt(ext) {
       return ['txt','js','html','css','py','java','md','json'].includes(ext);
     }
-    
     function isMediaExt(ext) {
       return ['mp3','wav','ogg','mp4','mov','webm','png','jpg','jpeg','gif'].includes(ext);
     }
 
     function addTextFile(container) {
-      const base='new_file', ext='txt';
-      let i=1, name;
+      const base = 'new_file', ext = 'txt';
+      let i = 1, name;
       const exists = () => [...container.querySelectorAll(':scope>.node .name')]
         .map(n => n.value).includes(name + '.' + ext);
       do { name = `${base}_${i++}`; } while (exists());
@@ -342,7 +393,7 @@
       const base = full.slice(0, idx);
       const ext = full.slice(idx+1);
       li.dataset.ext = ext;
-      
+
       filenameInput.value = '';
       extensionLabel.textContent = '';
       filenameInput.disabled = true;
@@ -352,7 +403,7 @@
       videoPlayer.style.display = 'none';
       imageViewer.style.display = 'none';
       saveBtn.disabled = true;
-      
+
       if (isTextExt(ext)) {
         filenameInput.value = full;
         extensionLabel.textContent = '';
@@ -390,6 +441,11 @@
         imageViewer.style.display = 'block';
         saveBtn.disabled = false;
       }
+
+      lastSaved = {
+        name: filenameInput.value + extensionLabel.textContent,
+        content: editor.value
+      };
     }
 
     function drawWaveform(url) {
@@ -408,7 +464,7 @@
               if (v < min) min = v;
               if (v > max) max = v;
             }
-            ctx.fillRect(i, (1+min)*amp, 1, Math.max(1, (max-min)*amp));
+            ctx.fillRect(i, (1+min)*amp, 1, Math.max(1,(max-min)*amp));
           }
         })
         .catch(() => {});
@@ -430,6 +486,7 @@
       videoPlayer.style.display = 'none';
       imageViewer.style.display = 'none';
       saveBtn.disabled = true;
+      lastSaved = { name: '', content: '' };
     }
 
     dragbar.addEventListener('mousedown', () => { isDragging = true; document.body.style.cursor = 'col-resize'; });
@@ -444,6 +501,20 @@
     document.addEventListener('mouseup', () => {
       if (isDragging) { isDragging = false; document.body.style.cursor = ''; }
     });
+
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      Object.assign(t.style, {
+        position: 'fixed', bottom: '1rem', left: '50%',
+        transform: 'translateX(-50%)',
+        background: '#444', color: '#fff',
+        padding: '0.5rem 1rem', borderRadius: '4px',
+        fontSize: '0.9em', zIndex: 2000
+      });
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2000);
+    }
   </script>
 </body>
 </html>

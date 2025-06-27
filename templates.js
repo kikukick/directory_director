@@ -5,7 +5,6 @@
 // 各テンプレートは files 配列を持ち、name（ファイル名）と content（ファイル中身）を指定します。
 
 window.TEMPLATES = {
-  // HTML5 の基本テンプレート
   "HTML5 Boilerplate": {
     files: [
       {
@@ -50,8 +49,43 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     ]
   },
+  
+  "Python Script": {
+    files: [
+      {
+        name: "main.py",
+        content: `#!/usr/bin/env python3
 
-  // JSON の初期画面テンプレート
+def main():
+    print("Hello, Python!")
+
+if __name__ == "__main__":
+    main()
+`
+      }
+    ]
+  },
+
+  "Markdown Doc": {
+    files: [
+      {
+        name: "README.md",
+        content: `# プロジェクトタイトル
+
+## 概要
+
+ここにプロジェクトの概要を書きます。
+
+## 使い方
+
+\`\`\`bash
+python main.py
+\`\`\`
+`
+      }
+    ]
+  },
+
   "JSON Starter": {
     files: [
       {

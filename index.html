@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>マルチメディア対応ディレクトリツール</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
   <style>
     :root {
       --bg-color: #1c1c1e;
@@ -70,12 +71,12 @@
       border:var(--border-width) solid #444; border-radius:var(--radius);
       padding:.5em; font-family:monospace;
     }
-    #add-template-btn {
+    #add-template-btn, #del-template-btn {
       background:var(--btn-bg); border:1px solid var(--btn-border);
       color:var(--btn-color); border-radius:var(--radius);
       padding:.6em 1em; cursor:pointer; margin-left:.5rem;
     }
-    #add-template-btn:hover { background:var(--btn-hover-bg); }
+    #add-template-btn:hover, #del-template-btn:hover { background:var(--btn-hover-bg); }
     #tree { list-style:none; flex-grow:1; margin-bottom:1rem; }
     .node {
       margin:.4em 0; padding:.6em 1em;
@@ -115,12 +116,23 @@
     #extension-label {
       margin-left:.5em; color:#888; font-family:monospace;
     }
-    textarea#editor {
-      flex-grow:1; resize:both; background:#111;
-      color:#f0f0f0; border:var(--border-width) solid #444;
+    /* Prism 用エディタ */
+    pre#editor {
+      flex-grow:1; overflow:auto;
+      background:#111; border:var(--border-width) solid #444;
       border-radius:var(--radius); padding:1rem;
-      font-family:monospace; margin-bottom:.5rem;
+      font-family: monospace; margin-bottom:.5rem;
     }
+    pre#editor[contenteditable="true"] {
+      outline: none;
+    }
+    #add-to-template-btn {
+      background:var(--btn-bg); border:1px solid var(--btn-border);
+      color:var(--btn-color); border-radius:var(--radius);
+      padding:.6em 1em; cursor:pointer; margin-bottom:1rem;
+      display:none;
+    }
+    #add-to-template-btn:hover { background:var(--btn-hover-bg); }
     canvas#waveform {
       width:100%; height:80px; margin-bottom:.5rem;
       background:#111; border:var(--border-width) solid #444;
@@ -159,7 +171,8 @@
       <select id="template-select">
         <option value="">テンプレート選択...</option>
       </select>
-      <button id="add-template-btn" class="action">テンプレート追加</button>
+      <button id="add-template-btn" class="action">既存テンプレート追加</button>
+      <button id="del-template-btn" class="action">テンプレート削除</button>
     </div>
     <ul id="tree"></ul>
     <button id="import-btn" class="action">ファイルをインポート</button>
@@ -169,6 +182,7 @@
   <div id="dragbar"></div>
   <div class="panel right-panel" id="rightPanel">
     <div id="editor-container">
+      <button id="add-to-template-btn" class="action">テンプレートに追加</button>
       <div style="display:flex; align-items:center; margin-bottom:.5rem;">
         <input type="text" id="filename-input" placeholder="選択中のファイル名" disabled />
         <span id="extension-label"></span>
@@ -177,11 +191,10 @@
       <audio id="audio-player" controls style="display:none;"></audio>
       <video id="video-player" controls style="display:none; max-height:300px;"></video>
       <img id="image-viewer" style="display:none;" />
-      <textarea id="editor" placeholder="編集可能なテキストエリア" disabled></textarea>
+      <pre id="editor" contenteditable="false" class="language-none line-numbers"></pre>
       <button id="save-btn" class="action" disabled>保存</button>
     </div>
   </div>
-
   <div id="confirm-modal">
     <div id="confirm-box">
       <p>保存されていない変更があります。移動してもよろしいですか？</p>
@@ -189,332 +202,368 @@
       <button id="confirm-no" class="modal-btn">いいえ</button>
     </div>
   </div>
-
-  <script src="templates.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
-  <script>
-    const tree = document.getElementById('tree');
-    const importBtn = document.getElementById('import-btn');
-    const downloadBtn = document.getElementById('download-btn');
-    const fileInput = document.getElementById('file-input');
-    const filenameInput = document.getElementById('filename-input');
-    const extensionLabel = document.getElementById('extension-label');
-    const editor = document.getElementById('editor');
-    const saveBtn = document.getElementById('save-btn');
-    const tplSelect = document.getElementById('template-select');
-    const tplBtn = document.getElementById('add-template-btn');
-    const confirmModal = document.getElementById('confirm-modal');
-    const confirmYes = document.getElementById('confirm-yes');
-    const confirmNo = document.getElementById('confirm-no');
-    const leftPanel = document.getElementById('leftPanel');
-    const rightPanel = document.getElementById('rightPanel');
-    const dragbar = document.getElementById('dragbar');
-    const waveformCanvas = document.getElementById('waveform');
-    const audioPlayer = document.getElementById('audio-player');
-    const videoPlayer = document.getElementById('video-player');
-    const imageViewer = document.getElementById('image-viewer');
-    const ctx = waveformCanvas.getContext('2d');
+  <script src="templates.js"></script>
 
-    let activeFolderNode = null;
-    let activeFileNode = null;
-    let lastSaved = { name: '', content: '' };
-    let pendingAction = null;
-    let isDragging = false;
-    let fileBlobs = new Map();
+<script>
+const tree = document.getElementById('tree');
+const importBtn = document.getElementById('import-btn');
+const downloadBtn = document.getElementById('download-btn');
+const fileInput = document.getElementById('file-input');
+const filenameInput = document.getElementById('filename-input');
+const extensionLabel = document.getElementById('extension-label');
+const preEditor = document.getElementById('editor');
+const saveBtn = document.getElementById('save-btn');
+const addToTplBtn = document.getElementById('add-to-template-btn');
+const tplSelect = document.getElementById('template-select');
+const addTplBtn = document.getElementById('add-template-btn');
+const delTplBtn = document.getElementById('del-template-btn');
+const confirmModal = document.getElementById('confirm-modal');
+const confirmYes = document.getElementById('confirm-yes');
+const confirmNo = document.getElementById('confirm-no');
+const leftPanel = document.getElementById('leftPanel');
+const rightPanel = document.getElementById('rightPanel');
+const dragbar = document.getElementById('dragbar');
+const waveformCanvas = document.getElementById('waveform');
+const audioPlayer = document.getElementById('audio-player');
+const videoPlayer = document.getElementById('video-player');
+const imageViewer = document.getElementById('image-viewer');
+const ctx = waveformCanvas.getContext('2d');
 
-    const rootLi = addNode(tree, 'project', true, true);
-    setActiveFolder(rootLi);
-
-    if (window.TEMPLATES) {
-      for (const key in TEMPLATES) {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = key;
-        tplSelect.appendChild(opt);
-      }
+let activeFolderNode = null;
+let activeFileNode = null;
+let lastSaved = { name: '', content: '' };
+let pendingAction = null;
+let isDragging = false;
+let fileBlobs = new Map();
+function loadLocalTpl() {
+  try { return JSON.parse(localStorage.getItem('localTemplates')) || {}; }
+  catch { return {}; }
+}
+function saveLocalTpl(obj) {
+  localStorage.setItem('localTemplates', JSON.stringify(obj));
+}
+function getAllTemplates() {
+  return Object.assign({}, window.TEMPLATES||{}, loadLocalTpl());
+}
+function refreshTplSelect() {
+  const all = getAllTemplates();
+  tplSelect.innerHTML = '<option value="">テンプレート選択...</option>';
+  for (const key in all) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key + (loadLocalTpl()[key]? ' (自作)' : '');
+    tplSelect.appendChild(opt);
+  }
+}
+const rootLi = addNode(tree, 'project', true, true);
+setActiveFolder(rootLi);
+refreshTplSelect();
+addTplBtn.addEventListener('click', () => {
+  const key = tplSelect.value;
+  if (!key) return showToast('テンプレートを選択してください。');
+  const all = getAllTemplates();
+  if (!activeFolderNode) return showToast('フォルダを選択してください。');
+  all[key].files.forEach(f => {
+    const li = addNode(activeFolderNode.querySelector('.children'), f.name, false, false);
+    li.dataset.content = f.content;
+  });
+});
+delTplBtn.addEventListener('click', () => {
+  const key = tplSelect.value;
+  const local = loadLocalTpl();
+  if (!local[key]) return showToast('自作テンプレートのみ削除できます。');
+  delete local[key];
+  saveLocalTpl(local);
+  refreshTplSelect();
+  showToast('テンプレートを削除しました。');
+});
+addToTplBtn.addEventListener('click', () => {
+  if (!activeFileNode) return;
+  const key = prompt('新規テンプレート名を入力');
+  if (!key) return;
+  const local = loadLocalTpl();
+  local[key] = {
+    files: [{
+      name: activeFileNode.querySelector('.name').value,
+      content: preEditor.textContent
+    }]
+  };
+  saveLocalTpl(local);
+  refreshTplSelect();
+  showToast('テンプレートを追加しました。');
+});
+function maybeSwitchNode(action) {
+  if (!activeFileNode) { action(); return; }
+  const curName = filenameInput.value + extensionLabel.textContent;
+  const curContent = preEditor.textContent;
+  if (curName !== lastSaved.name || curContent !== lastSaved.content) {
+    pendingAction = action;
+    confirmModal.style.display = 'flex';
+    return;
+  }
+  action();
+}
+confirmYes.addEventListener('click', () => {
+  confirmModal.style.display = 'none';
+  if (pendingAction) pendingAction();
+  pendingAction = null;
+});
+confirmNo.addEventListener('click', () => {
+  confirmModal.style.display = 'none';
+  pendingAction = null;
+});
+saveBtn.addEventListener('click', () => {
+  if (!activeFileNode) return;
+  applySave();
+  lastSaved = {
+    name: filenameInput.value + extensionLabel.textContent,
+    content: preEditor.textContent
+  };
+});
+function applySave() {
+  const ext = activeFileNode.dataset.ext;
+  if (isMediaExt(ext)) {
+    activeFileNode.querySelector('.name').value =
+      filenameInput.value.trim() + '.' + ext;
+  } else {
+    activeFileNode.querySelector('.name').value = filenameInput.value.trim();
+    activeFileNode.dataset.content = preEditor.textContent;
+  }
+}
+importBtn.addEventListener('click', () => {
+  if (!activeFolderNode) { showToast('フォルダを選択してください。'); return; }
+  fileInput.click();
+});
+fileInput.addEventListener('change', e => {
+  for (const file of e.target.files) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    let li;
+    if (isTextExt(ext)) {
+      li = addTextFile(activeFolderNode.querySelector('.children'));
+      const reader = new FileReader();
+      reader.onload = () => li.dataset.content = reader.result;
+      reader.readAsText(file, 'UTF-8');
+    } else {
+      li = addNode(activeFolderNode.querySelector('.children'), file.name, false, false);
+      const url = URL.createObjectURL(file);
+      fileBlobs.set(li, { url, ext });
     }
-
-    tplBtn.addEventListener('click', () => {
-      const tplKey = tplSelect.value;
-      if (!tplKey || !window.TEMPLATES[tplKey]) {
-        showToast('テンプレートを選択してください。');
-        return;
-      }
-      if (!activeFolderNode) {
-        showToast('フォルダを選択してください。');
-        return;
-      }
-      TEMPLATES[tplKey].files.forEach(file => {
-        const li = addNode(activeFolderNode.querySelector('.children'), file.name, false, false);
-        li.dataset.content = file.content;
-      });
-    });
-
-    function maybeSwitchNode(action) {
-      if (!activeFileNode) { action(); return; }
-      const currentName = filenameInput.value + extensionLabel.textContent;
-      const currentContent = editor.value;
-      if (currentName !== lastSaved.name || currentContent !== lastSaved.content) {
-        pendingAction = action;
-        confirmModal.style.display = 'flex';
-        return;
-      }
-      action();
-    }
-    confirmYes.addEventListener('click', () => {
-      confirmModal.style.display = 'none';
-      if (pendingAction) pendingAction();
-      pendingAction = null;
-    });
-    confirmNo.addEventListener('click', () => {
-      confirmModal.style.display = 'none';
-      pendingAction = null;
-    });
-
-    saveBtn.addEventListener('click', () => {
-      if (!activeFileNode) return;
-      applySave();
-      lastSaved = {
-        name: filenameInput.value + extensionLabel.textContent,
-        content: editor.value
-      };
-    });
-    function applySave() {
-      const ext = activeFileNode.dataset.ext;
-      if (isMediaExt(ext)) {
-        const base = filenameInput.value.trim();
-        activeFileNode.querySelector('.name').value = base + '.' + ext;
-      } else {
-        activeFileNode.querySelector('.name').value = filenameInput.value.trim();
-        activeFileNode.dataset.content = editor.value;
-      }
-    }
-
-    importBtn.addEventListener('click', () => {
-      if (!activeFolderNode) { showToast('フォルダを選択してください。'); return; }
-      fileInput.click();
-    });
-    fileInput.addEventListener('change', e => {
-      for (const file of e.target.files) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        let li;
-        if (isTextExt(ext)) {
-          li = addTextFile(activeFolderNode.querySelector('.children'));
-          const reader = new FileReader();
-          reader.onload = () => li.dataset.content = reader.result;
-          reader.readAsText(file, 'UTF-8');
+  }
+  fileInput.value = '';
+});
+downloadBtn.addEventListener('click', () => {
+  const zip = new JSZip();
+  (function walk(ul, dir) {
+    ul.querySelectorAll(':scope>.node').forEach(li => {
+      const nm = li.querySelector('.name').value.trim();
+      if (li.classList.contains('file')) {
+        if (fileBlobs.has(li)) {
+          fetch(fileBlobs.get(li).url).then(r => r.blob()).then(b => dir.file(nm, b));
         } else {
-          li = addNode(activeFolderNode.querySelector('.children'), file.name, false, false);
-          const url = URL.createObjectURL(file);
-          fileBlobs.set(li, { url, ext });
+          dir.file(nm, li.dataset.content || '');
         }
+      } else {
+        const sub = dir.folder(nm);
+        walk(li.querySelector('.children'), sub);
       }
-      fileInput.value = '';
     });
+  })(tree, zip);
+  setTimeout(() => zip.generateAsync({ type:'blob' }).then(b => saveAs(b,'project.zip')), 500);
+});
+function addNode(parent, name, isFolder, isRoot) {
+  const li = document.createElement('li');
+  li.classList.add('node', isFolder?'folder':'file');
+  if (isRoot) li.classList.add('root');
+  const ctrl = `
+    ${isFolder?'<button class="add-folder">📁+</button><button class="add-file">📄+</button>':''}
+    ${!isRoot?'<button class="delete">🗑️</button>':''}
+  `;
+  li.innerHTML = `
+    <input class="name" value="${name}" ${isFolder?'':'readonly'} />
+    <span class="controls">${ctrl}</span>
+    <ul class="children"></ul>
+  `;
+  parent.appendChild(li);
 
-    downloadBtn.addEventListener('click', () => {
-      const zip = new JSZip();
-      (function walk(ul, dir) {
-        ul.querySelectorAll(':scope>.node').forEach(li => {
-          const nm = li.querySelector('.name').value.trim();
-          if (li.classList.contains('file')) {
-            if (fileBlobs.has(li)) {
-              fetch(fileBlobs.get(li).url).then(r=>r.blob()).then(b=>dir.file(nm, b));
-            } else {
-              dir.file(nm, li.dataset.content||'');
-            }
-          } else {
-            const sub = dir.folder(nm);
-            walk(li.querySelector('.children'), sub);
-          }
-        });
-      })(tree, zip);
-      setTimeout(() => zip.generateAsync({ type:'blob' }).then(b => saveAs(b,'project.zip')), 500);
+  if (isFolder) {
+    li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => setActiveFolder(li)); });
+    li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addNode(li.querySelector('.children'),'new_folder',true,false)); });
+    li.querySelector('.add-file').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addTextFile(li.querySelector('.children'))); });
+    Sortable.create(li.querySelector('.children'), { group:'nested', animation:150, fallbackOnBody:true, swapThreshold:0.65 });
+  }
+
+  const d = li.querySelector('.delete');
+  if (d) d.addEventListener('click', e => {
+    e.stopPropagation();
+    if (confirm('削除しますか？')) {
+      if (activeFolderNode === li) setActiveFolder(rootLi);
+      li.remove();
+    }
+  });
+
+  if (!isFolder) {
+    li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => displayFile(li)); });
+  }
+
+  return li;
+}
+
+function isTextExt(ext) {
+  return ['txt','js','html','css','py','java','md','json'].includes(ext);
+}
+function isMediaExt(ext) {
+  return ['mp3','wav','ogg','mp4','mov','webm','png','jpg','jpeg','gif'].includes(ext);
+}
+function addTextFile(container) {
+  const base = 'new_file', ext = 'txt';
+  let i = 1, name;
+  const exists = () => [...container.querySelectorAll(':scope>.node .name')]
+    .map(n => n.value).includes(name + '.' + ext);
+  do { name = `${base}_${i++}`; } while (exists());
+  const li = addNode(container, name + '.' + ext, false, false);
+  li.dataset.content = '';
+  return li;
+}
+function displayFile(li) {
+  activeFileNode = li;
+  const full = li.querySelector('.name').value;
+  const idx = full.lastIndexOf('.');
+  const base = full.slice(0, idx);
+  const ext = full.slice(idx+1);
+  li.dataset.ext = ext;
+  filenameInput.value = '';
+  extensionLabel.textContent = '';
+  filenameInput.disabled = true;
+  preEditor.style.display = 'none';
+  preEditor.setAttribute('contenteditable','false');
+  preEditor.className = 'language-none line-numbers';
+  waveformCanvas.style.display = 'none';
+  audioPlayer.style.display = 'none';
+  videoPlayer.style.display = 'none';
+  imageViewer.style.display = 'none';
+  saveBtn.disabled = true;
+  addToTplBtn.style.display = 'none';
+  if (isTextExt(ext)) {
+    filenameInput.value = full;
+    extensionLabel.textContent = '';
+    filenameInput.disabled = false;
+    preEditor.setAttribute('contenteditable','true');
+    preEditor.className = 'language-' + ext + ' line-numbers';
+    preEditor.textContent = li.dataset.content || '';
+    preEditor.style.display = 'block';
+    Prism.highlightElement(preEditor);
+    saveBtn.disabled = false;
+    addToTplBtn.style.display = 'inline-block';
+    preEditor.addEventListener('input', () => {
+      lastSaved.content = preEditor.textContent;
+      Prism.highlightElement(preEditor);
     });
-
-    function addNode(parent, name, isFolder, isRoot) {
-      const li = document.createElement('li');
-      li.classList.add('node', isFolder?'folder':'file');
-      if (isRoot) li.classList.add('root');
-      const controls = `
-        ${isFolder?'<button class="add-folder">📁+</button><button class="add-file">📄+</button>':''}
-        ${!isRoot?'<button class="delete">🗑️</button>':''}
-      `;
-      li.innerHTML = `
-        <input class="name" value="${name}" ${isFolder?'':'readonly'} />
-        <span class="controls">${controls}</span>
-        <ul class="children"></ul>
-      `;
-      parent.appendChild(li);
-      if (isFolder) {
-        li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => setActiveFolder(li)); });
-        li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addNode(li.querySelector('.children'),'new_folder',true,false)); });
-        li.querySelector('.add-file').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addTextFile(li.querySelector('.children'))); });
-        Sortable.create(li.querySelector('.children'), { group:'nested', animation:150, fallbackOnBody:true, swapThreshold:0.65 });
-      }
-      const d = li.querySelector('.delete');
-      if (d) d.addEventListener('click', e => {
-        e.stopPropagation();
-        if (confirm('削除しますか？')) {
-          if (activeFolderNode === li) setActiveFolder(rootLi);
-          li.remove();
+  }
+  else if (['mp3','wav','ogg'].includes(ext) && fileBlobs.has(li)) {
+    filenameInput.value = base;
+    extensionLabel.textContent = '.' + ext;
+    filenameInput.disabled = false;
+    audioPlayer.src = fileBlobs.get(li).url;
+    audioPlayer.style.display = 'block';
+    drawWaveform(fileBlobs.get(li).url);
+    saveBtn.disabled = false;
+  }
+  else if (['mp4','mov','webm'].includes(ext) && fileBlobs.has(li)) {
+    filenameInput.value = base;
+    extensionLabel.textContent = '.' + ext;
+    filenameInput.disabled = false;
+    videoPlayer.src = fileBlobs.get(li).url;
+    videoPlayer.style.display = 'block';
+    saveBtn.disabled = false;
+  }
+  else if (['png','jpg','jpeg','gif'].includes(ext) && fileBlobs.has(li)) {
+    filenameInput.value = base;
+    extensionLabel.textContent = '.' + ext;
+    filenameInput.disabled = false;
+    imageViewer.src = fileBlobs.get(li).url;
+    imageViewer.style.display = 'block';
+    saveBtn.disabled = false;
+  }
+  lastSaved = {
+    name: filenameInput.value + extensionLabel.textContent,
+    content: preEditor.textContent
+  };
+}
+function drawWaveform(url) {
+  waveformCanvas.style.display = 'block';
+  fetch(url)
+    .then(r => r.arrayBuffer())
+    .then(buf => new AudioContext().decodeAudioData(buf))
+    .then(audioBuf => {
+      const data = audioBuf.getChannelData(0);
+      const step = Math.ceil(data.length / waveformCanvas.width);
+      const amp = waveformCanvas.height / 2;
+      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      ctx.fillStyle = '#555';
+      for (let i = 0; i < waveformCanvas.width; i++) {
+        let min = 1, max = -1;
+        for (let j = 0; j < step; j++) {
+          const v = data[(i*step)+j];
+          if (v < min) min = v;
+          if (v > max) max = v;
         }
-      });
-      if (!isFolder) {
-        li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => displayFile(li)); });
+        ctx.fillRect(i, (1+min)*amp, 1, Math.max(1, (max-min)*amp));
       }
-      return li;
-    }
+    })
+    .catch(() => {});
+}
 
-    function isTextExt(ext) {
-      return ['txt','js','html','css','py','java','md','json'].includes(ext);
-    }
-    function isMediaExt(ext) {
-      return ['mp3','wav','ogg','mp4','mov','webm','png','jpg','jpeg','gif'].includes(ext);
-    }
-
-    function addTextFile(container) {
-      const base = 'new_file', ext = 'txt';
-      let i = 1, name;
-      const exists = () => [...container.querySelectorAll(':scope>.node .name')]
-        .map(n => n.value).includes(name + '.' + ext);
-      do { name = `${base}_${i++}`; } while (exists());
-      const li = addNode(container, name + '.' + ext, false, false);
-      li.dataset.content = '';
-      return li;
-    }
-
-    function displayFile(li) {
-      activeFileNode = li;
-      const full = li.querySelector('.name').value;
-      const idx = full.lastIndexOf('.');
-      const base = full.slice(0, idx);
-      const ext = full.slice(idx+1);
-      li.dataset.ext = ext;
-
-      filenameInput.value = '';
-      extensionLabel.textContent = '';
-      filenameInput.disabled = true;
-      editor.style.display = 'none'; editor.disabled = true;
-      waveformCanvas.style.display = 'none';
-      audioPlayer.style.display = 'none';
-      videoPlayer.style.display = 'none';
-      imageViewer.style.display = 'none';
-      saveBtn.disabled = true;
-
-      if (isTextExt(ext)) {
-        filenameInput.value = full;
-        extensionLabel.textContent = '';
-        filenameInput.disabled = false;
-        editor.value = li.dataset.content || '';
-        editor.style.display = 'block';
-        editor.disabled = false;
-        saveBtn.disabled = false;
-      }
-
-      else if (['mp3','wav','ogg'].includes(ext) && fileBlobs.has(li)) {
-        filenameInput.value = base;
-        extensionLabel.textContent = '.' + ext;
-        filenameInput.disabled = false;
-        audioPlayer.src = fileBlobs.get(li).url;
-        audioPlayer.style.display = 'block';
-        drawWaveform(fileBlobs.get(li).url);
-        saveBtn.disabled = false;
-      }
-
-      else if (['mp4','mov','webm'].includes(ext) && fileBlobs.has(li)) {
-        filenameInput.value = base;
-        extensionLabel.textContent = '.' + ext;
-        filenameInput.disabled = false;
-        videoPlayer.src = fileBlobs.get(li).url;
-        videoPlayer.style.display = 'block';
-        saveBtn.disabled = false;
-      }
-
-      else if (['png','jpg','jpeg','gif'].includes(ext) && fileBlobs.has(li)) {
-        filenameInput.value = base;
-        extensionLabel.textContent = '.' + ext;
-        filenameInput.disabled = false;
-        imageViewer.src = fileBlobs.get(li).url;
-        imageViewer.style.display = 'block';
-        saveBtn.disabled = false;
-      }
-
-      lastSaved = {
-        name: filenameInput.value + extensionLabel.textContent,
-        content: editor.value
-      };
-    }
-
-    function drawWaveform(url) {
-      waveformCanvas.style.display = 'block';
-      fetch(url).then(r => r.arrayBuffer()).then(buf => new AudioContext().decodeAudioData(buf))
-        .then(audioBuf => {
-          const data = audioBuf.getChannelData(0);
-          const step = Math.ceil(data.length / waveformCanvas.width);
-          const amp = waveformCanvas.height / 2;
-          ctx.clearRect(0,0,waveformCanvas.width,waveformCanvas.height);
-          ctx.fillStyle = '#555';
-          for (let i = 0; i < waveformCanvas.width; i++) {
-            let min = 1, max = -1;
-            for (let j = 0; j < step; j++) {
-              const v = data[(i*step)+j];
-              if (v < min) min = v;
-              if (v > max) max = v;
-            }
-            ctx.fillRect(i, (1+min)*amp, 1, Math.max(1,(max-min)*amp));
-          }
-        })
-        .catch(() => {});
-    }
-
-    function setActiveFolder(li) {
-      if (activeFolderNode) activeFolderNode.classList.remove('selected-folder');
-      activeFolderNode = li;
-      li.classList.add('selected-folder');
-      activeFileNode = null;
-      filenameInput.value = '';
-      extensionLabel.textContent = '';
-      filenameInput.disabled = true;
-      editor.value = '';
-      editor.disabled = true;
-      editor.style.display = 'none';
-      waveformCanvas.style.display = 'none';
-      audioPlayer.style.display = 'none';
-      videoPlayer.style.display = 'none';
-      imageViewer.style.display = 'none';
-      saveBtn.disabled = true;
-      lastSaved = { name: '', content: '' };
-    }
-
-    dragbar.addEventListener('mousedown', () => { isDragging = true; document.body.style.cursor = 'col-resize'; });
-    document.addEventListener('mousemove', e => {
-      if (!isDragging) return;
-      const pct = e.clientX / window.innerWidth * 100;
-      if (pct > 10 && pct < 90) {
-        leftPanel.style.width = pct + '%';
-        rightPanel.style.width = (100 - pct) + '%';
-      }
-    });
-    document.addEventListener('mouseup', () => {
-      if (isDragging) { isDragging = false; document.body.style.cursor = ''; }
-    });
-
-    function showToast(msg) {
-      const t = document.createElement('div');
-      t.textContent = msg;
-      Object.assign(t.style, {
-        position: 'fixed', bottom: '1rem', left: '50%',
-        transform: 'translateX(-50%)',
-        background: '#444', color: '#fff',
-        padding: '0.5rem 1rem', borderRadius: '4px',
-        fontSize: '0.9em', zIndex: 2000
-      });
-      document.body.appendChild(t);
-      setTimeout(() => t.remove(), 2000);
-    }
-  </script>
+// フォルダ選択／未選択
+function setActiveFolder(li) {
+  if (activeFolderNode) activeFolderNode.classList.remove('selected-folder');
+  activeFolderNode = li;
+  li.classList.add('selected-folder');
+  activeFileNode = null;
+  filenameInput.value = '';
+  extensionLabel.textContent = '';
+  filenameInput.disabled = true;
+  preEditor.textContent = '';
+  preEditor.style.display = 'none';
+  preEditor.setAttribute('contenteditable','false');
+  waveformCanvas.style.display = 'none';
+  audioPlayer.style.display = 'none';
+  videoPlayer.style.display = 'none';
+  imageViewer.style.display = 'none';
+  saveBtn.disabled = true;
+  addToTplBtn.style.display = 'none';
+  lastSaved = { name:'', content:'' };
+}
+dragbar.addEventListener('mousedown', () => { isDragging = true; document.body.style.cursor = 'col-resize'; });
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const pct = e.clientX / window.innerWidth * 100;
+  if (pct > 10 && pct < 90) {
+    leftPanel.style.width = pct + '%';
+    rightPanel.style.width = (100 - pct) + '%';
+  }
+});
+document.addEventListener('mouseup', () => {
+  if (isDragging) { isDragging = false; document.body.style.cursor = ''; }
+});
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  Object.assign(t.style, {
+    position: 'fixed', bottom: '1rem', left: '50%',
+    transform: 'translateX(-50%)',
+    background: '#444', color: '#fff',
+    padding: '0.5rem 1rem', borderRadius: '4px',
+    fontSize: '0.9em', zIndex: 2000
+  });
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+Prism.plugins.autoloader.languages_path = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/';
+</script>
 </body>
 </html>

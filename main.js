@@ -1,4 +1,3 @@
-<script>
 const tree = document.getElementById('tree');
 const importBtn = document.getElementById('import-btn');
 const downloadBtn = document.getElementById('download-btn');
@@ -403,4 +402,3 @@ function showToast(msg) {
 }
 
 Prism.plugins.autoloader.languages_path = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/';
-</script>

@@ -173,6 +173,7 @@ downloadBtn.addEventListener('click', () => {
   setTimeout(() => zip.generateAsync({ type:'blob' }).then(b => saveAs(b,'project.zip')), 500);
 });
 
+
 function addNode(parent, name, isFolder, isRoot) {
   const li = document.createElement('li');
   li.classList.add('node', isFolder?'folder':'file');

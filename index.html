@@ -240,6 +240,7 @@ let lastSaved = { name: '', content: '' };
 let pendingAction = null;
 let isDragging = false;
 let fileBlobs = new Map();
+
 function loadLocalTpl() {
   try { return JSON.parse(localStorage.getItem('localTemplates')) || {}; }
   catch { return {}; }
@@ -247,9 +248,11 @@ function loadLocalTpl() {
 function saveLocalTpl(obj) {
   localStorage.setItem('localTemplates', JSON.stringify(obj));
 }
+
 function getAllTemplates() {
   return Object.assign({}, window.TEMPLATES||{}, loadLocalTpl());
 }
+
 function refreshTplSelect() {
   const all = getAllTemplates();
   tplSelect.innerHTML = '<option value="">テンプレート選択...</option>';
@@ -260,9 +263,11 @@ function refreshTplSelect() {
     tplSelect.appendChild(opt);
   }
 }
+
 const rootLi = addNode(tree, 'project', true, true);
 setActiveFolder(rootLi);
 refreshTplSelect();
+
 addTplBtn.addEventListener('click', () => {
   const key = tplSelect.value;
   if (!key) return showToast('テンプレートを選択してください。');
@@ -273,6 +278,7 @@ addTplBtn.addEventListener('click', () => {
     li.dataset.content = f.content;
   });
 });
+
 delTplBtn.addEventListener('click', () => {
   const key = tplSelect.value;
   const local = loadLocalTpl();
@@ -282,6 +288,7 @@ delTplBtn.addEventListener('click', () => {
   refreshTplSelect();
   showToast('テンプレートを削除しました。');
 });
+
 addToTplBtn.addEventListener('click', () => {
   if (!activeFileNode) return;
   const key = prompt('新規テンプレート名を入力');
@@ -297,6 +304,7 @@ addToTplBtn.addEventListener('click', () => {
   refreshTplSelect();
   showToast('テンプレートを追加しました。');
 });
+
 function maybeSwitchNode(action) {
   if (!activeFileNode) { action(); return; }
   const curName = filenameInput.value + extensionLabel.textContent;
@@ -317,6 +325,7 @@ confirmNo.addEventListener('click', () => {
   confirmModal.style.display = 'none';
   pendingAction = null;
 });
+
 saveBtn.addEventListener('click', () => {
   if (!activeFileNode) return;
   applySave();
@@ -335,6 +344,7 @@ function applySave() {
     activeFileNode.dataset.content = preEditor.textContent;
   }
 }
+
 importBtn.addEventListener('click', () => {
   if (!activeFolderNode) { showToast('フォルダを選択してください。'); return; }
   fileInput.click();
@@ -356,6 +366,7 @@ fileInput.addEventListener('change', e => {
   }
   fileInput.value = '';
 });
+
 downloadBtn.addEventListener('click', () => {
   const zip = new JSZip();
   (function walk(ul, dir) {
@@ -375,6 +386,7 @@ downloadBtn.addEventListener('click', () => {
   })(tree, zip);
   setTimeout(() => zip.generateAsync({ type:'blob' }).then(b => saveAs(b,'project.zip')), 500);
 });
+
 function addNode(parent, name, isFolder, isRoot) {
   const li = document.createElement('li');
   li.classList.add('node', isFolder?'folder':'file');
@@ -419,6 +431,7 @@ function isTextExt(ext) {
 function isMediaExt(ext) {
   return ['mp3','wav','ogg','mp4','mov','webm','png','jpg','jpeg','gif'].includes(ext);
 }
+
 function addTextFile(container) {
   const base = 'new_file', ext = 'txt';
   let i = 1, name;
@@ -429,6 +442,7 @@ function addTextFile(container) {
   li.dataset.content = '';
   return li;
 }
+
 function displayFile(li) {
   activeFileNode = li;
   const full = li.querySelector('.name').value;
@@ -436,6 +450,7 @@ function displayFile(li) {
   const base = full.slice(0, idx);
   const ext = full.slice(idx+1);
   li.dataset.ext = ext;
+
   filenameInput.value = '';
   extensionLabel.textContent = '';
   filenameInput.disabled = true;
@@ -448,6 +463,7 @@ function displayFile(li) {
   imageViewer.style.display = 'none';
   saveBtn.disabled = true;
   addToTplBtn.style.display = 'none';
+  
   if (isTextExt(ext)) {
     filenameInput.value = full;
     extensionLabel.textContent = '';
@@ -459,11 +475,11 @@ function displayFile(li) {
     Prism.highlightElement(preEditor);
     saveBtn.disabled = false;
     addToTplBtn.style.display = 'inline-block';
-    preEditor.addEventListener('input', () => {
-      lastSaved.content = preEditor.textContent;
-      Prism.highlightElement(preEditor);
-    });
+
+    preEditor.addEventListener('input', onEditorInput);
   }
+
+  // Audio
   else if (['mp3','wav','ogg'].includes(ext) && fileBlobs.has(li)) {
     filenameInput.value = base;
     extensionLabel.textContent = '.' + ext;
@@ -494,6 +510,29 @@ function displayFile(li) {
     content: preEditor.textContent
   };
 }
+function getCaretPosition() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  return { start: range.startOffset, end: range.endOffset };
+}
+function setCaretPosition(pos) {
+  preEditor.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  const range = document.createRange();
+  // 単純化のため preEditor.firstChild
+  const textNode = preEditor.firstChild;
+  range.setStart(textNode, pos.start);
+  range.setEnd(textNode, pos.end);
+  sel.addRange(range);
+}
+function onEditorInput() {
+  const caret = getCaretPosition();
+  Prism.highlightElement(preEditor);
+  if (caret) setCaretPosition(caret);
+  lastSaved.content = preEditor.textContent;
+}
 function drawWaveform(url) {
   waveformCanvas.style.display = 'block';
   fetch(url)
@@ -517,8 +556,6 @@ function drawWaveform(url) {
     })
     .catch(() => {});
 }
-
-// フォルダ選択／未選択
 function setActiveFolder(li) {
   if (activeFolderNode) activeFolderNode.classList.remove('selected-folder');
   activeFolderNode = li;
@@ -536,7 +573,7 @@ function setActiveFolder(li) {
   imageViewer.style.display = 'none';
   saveBtn.disabled = true;
   addToTplBtn.style.display = 'none';
-  lastSaved = { name:'', content:'' };
+  lastSaved = { name: '', content: '' };
 }
 dragbar.addEventListener('mousedown', () => { isDragging = true; document.body.style.cursor = 'col-resize'; });
 document.addEventListener('mousemove', e => {

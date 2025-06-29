@@ -196,10 +196,10 @@ function addNode(parent, name, isFolder, isRoot) {
 }
 
 function isTextExt(ext) {
-  return ['txt', 'js', 'html', 'css', 'py', 'java', 'md', 'json'].includes(ext);
+  return ['txt', 'js', 'html', 'css', 'py', 'java', 'md', 'json', 'h5', 'keras', 'pyc', 'log'].includes(ext);
 }
 function isMediaExt(ext) {
-  return ['mp3', 'wav', 'ogg', 'mp4', 'mov', 'webm', 'png', 'jpg', 'jpeg', 'gif', 'h5', 'keras', 'pyc', 'log'].includes(ext);
+  return ['mp3', 'wav', 'ogg', 'mp4', 'mov', 'webm', 'png', 'jpg', 'jpeg', 'gif'].includes(ext);
 }
 
 function addTextFile(container) {

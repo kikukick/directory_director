@@ -99,5 +99,76 @@ python main.py
 }`
       }
     ]
+  },
+
+  
+    "Deep Learning Project": {
+    files: [
+      {
+        name: "model/best_model.weight.h5",
+        content: ""
+      },
+      {
+        name: "model/learn_model.weight.h5",
+        content: ""
+      },
+      {
+        name: "src/main.py",
+        content: `#!/usr/bin/env python3
+
+def main():
+    print("モデルを読み込みます")
+
+if __name__ == "__main__":
+    main()
+`
+      },
+      {
+        name: "src/utils/api.py",
+        content: `def get_data():
+    return "データ取得"
+`
+      },
+      {
+        name: "src/audio.py",
+        content: `def record_audio():
+    print("音声を録音します")
+`
+      },
+      {
+        name: "src/camera.py",
+        content: `def capture_image():
+    print("画像をキャプチャします")
+`
+      },
+      {
+        name: "README.md",
+        content: `# Deep Learning Project
+
+## 概要
+
+このプロジェクトは音声や画像データを使って学習を行うものです。
+
+## 実行方法
+
+\`\`\`bash
+sh run.sh
+\`\`\`
+`
+      },
+      {
+        name: "requirements.txt",
+        content: `tensorflow
+numpy
+opencv-python
+`
+      },
+      {
+        name: "run.sh",
+        content: `#!/bin/bash
+python3 src/main.py
+`
+      }
+    ]
   }
 };

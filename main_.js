@@ -1,3 +1,4 @@
+// main.js
 const tree = document.getElementById('tree');
 const importBtn = document.getElementById('import-btn');
 const downloadBtn = document.getElementById('download-btn');
@@ -13,8 +14,6 @@ const delTplBtn = document.getElementById('del-template-btn');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
-const leftPanel = document.getElementById('leftPanel');
-const rightPanel = document.getElementById('rightPanel');
 const dragbar = document.getElementById('dragbar');
 const waveformCanvas = document.getElementById('waveform');
 const audioPlayer = document.getElementById('audio-player');
@@ -30,14 +29,13 @@ let isDragging = false;
 let fileBlobs = new Map();
 
 function loadLocalTpl() {
-  try { return JSON.parse(localStorage.getItem('localTemplates')) || {}; }
-  catch { return {}; }
+  try { return JSON.parse(localStorage.getItem('localTemplates')) || {}; } catch { return {}; }
 }
 function saveLocalTpl(obj) {
   localStorage.setItem('localTemplates', JSON.stringify(obj));
 }
 function getAllTemplates() {
-  return Object.assign({}, window.TEMPLATES||{}, loadLocalTpl());
+  return Object.assign({}, window.TEMPLATES || {}, loadLocalTpl());
 }
 function refreshTplSelect() {
   const all = getAllTemplates();
@@ -45,7 +43,7 @@ function refreshTplSelect() {
   for (const key in all) {
     const opt = document.createElement('option');
     opt.value = key;
-    opt.textContent = key + (loadLocalTpl()[key]? ' (自作)' : '');
+    opt.textContent = key + (loadLocalTpl()[key] ? ' (自作)' : '');
     tplSelect.appendChild(opt);
   }
 }
@@ -64,7 +62,6 @@ addTplBtn.addEventListener('click', () => {
     li.dataset.content = f.content;
   });
 });
-
 delTplBtn.addEventListener('click', () => {
   const key = tplSelect.value;
   const local = loadLocalTpl();
@@ -74,7 +71,6 @@ delTplBtn.addEventListener('click', () => {
   refreshTplSelect();
   showToast('テンプレートを削除しました。');
 });
-
 addToTplBtn.addEventListener('click', () => {
   if (!activeFileNode) return;
   const key = prompt('新規テンプレート名を入力');
@@ -123,8 +119,7 @@ saveBtn.addEventListener('click', () => {
 function applySave() {
   const ext = activeFileNode.dataset.ext;
   if (isMediaExt(ext)) {
-    activeFileNode.querySelector('.name').value =
-      filenameInput.value.trim() + '.' + ext;
+    activeFileNode.querySelector('.name').value = filenameInput.value.trim() + '.' + ext;
   } else {
     activeFileNode.querySelector('.name').value = filenameInput.value.trim();
     activeFileNode.dataset.content = preEditor.textContent;
@@ -156,7 +151,7 @@ fileInput.addEventListener('change', e => {
 downloadBtn.addEventListener('click', () => {
   const zip = new JSZip();
   (function walk(ul, dir) {
-    ul.querySelectorAll(':scope>.node').forEach(li => {
+    ul.querySelectorAll(':scope > .node').forEach(li => {
       const nm = li.querySelector('.name').value.trim();
       if (li.classList.contains('file')) {
         if (fileBlobs.has(li)) {
@@ -170,56 +165,51 @@ downloadBtn.addEventListener('click', () => {
       }
     });
   })(tree, zip);
-  setTimeout(() => zip.generateAsync({ type:'blob' }).then(b => saveAs(b,'project.zip')), 500);
+  setTimeout(() => zip.generateAsync({ type: 'blob' }).then(b => saveAs(b, 'project.zip')), 500);
 });
-
 
 function addNode(parent, name, isFolder, isRoot) {
   const li = document.createElement('li');
-  li.classList.add('node', isFolder?'folder':'file');
+  li.classList.add('node', isFolder ? 'folder' : 'file');
   if (isRoot) li.classList.add('root');
   const ctrl = `
-    ${isFolder?'<button class="add-folder">📁+</button><button class="add-file">📄+</button>':''}
-    ${!isRoot?'<button class="delete">🗑️</button>':''}
+    ${isFolder ? '<button class="add-folder">📁+</button><button class="add-file">📄+</button>' : ''}
+    ${!isRoot ? '<button class="delete">🗑️</button>' : ''}
   `;
   li.innerHTML = `
-    <input class="name" value="${name}" ${isFolder?'':'readonly'} />
+    <input class="name" value="${name}" ${isFolder ? '' : 'readonly'} />
     <span class="controls">${ctrl}</span>
     <ul class="children"></ul>
   `;
   parent.appendChild(li);
+
   if (isFolder) {
     li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => setActiveFolder(li)); });
-    li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addNode(li.querySelector('.children'),'new_folder',true,false)); });
+    li.querySelector('.add-folder').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addNode(li.querySelector('.children'), 'new_folder', true, false)); });
     li.querySelector('.add-file').addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => addTextFile(li.querySelector('.children'))); });
-    Sortable.create(li.querySelector('.children'), { group:'nested', animation:150, fallbackOnBody:true, swapThreshold:0.65 });
+    Sortable.create(li.querySelector('.children'), { group: 'nested', animation: 150, fallbackOnBody: true, swapThreshold: 0.65 });
   }
+
   const d = li.querySelector('.delete');
-  if (d) d.addEventListener('click', e => {
-    e.stopPropagation();
-    if (confirm('削除しますか？')) {
-      if (activeFolderNode === li) setActiveFolder(rootLi);
-      li.remove();
-    }
-  });
+  if (d) d.addEventListener('click', e => { e.stopPropagation(); if (confirm('削除しますか？')) { if (activeFolderNode === li) setActiveFolder(rootLi); li.remove(); } });
+
   if (!isFolder) {
     li.addEventListener('click', e => { e.stopPropagation(); maybeSwitchNode(() => displayFile(li)); });
   }
+
   return li;
 }
 
 function isTextExt(ext) {
-  return ['txt','js','html','css','py','java','md','json'].includes(ext);
+  return ['txt', 'js', 'html', 'css', 'py', 'java', 'md', 'json'].includes(ext);
 }
 function isMediaExt(ext) {
-  return ['mp3','wav','ogg','mp4','mov','webm','png','jpg','jpeg','gif'].includes(ext);
+  return ['mp3', 'wav', 'ogg', 'mp4', 'mov', 'webm', 'png', 'jpg', 'jpeg', 'gif'].includes(ext);
 }
-
 function addTextFile(container) {
   const base = 'new_file', ext = 'txt';
   let i = 1, name;
-  const exists = () => [...container.querySelectorAll(':scope>.node .name')]
-    .map(n => n.value).includes(name + '.' + ext);
+  const exists = () => [...container.querySelectorAll(':scope > .node .name')].map(n => n.value).includes(name + '.' + ext);
   do { name = `${base}_${i++}`; } while (exists());
   const li = addNode(container, name + '.' + ext, false, false);
   li.dataset.content = '';
@@ -231,14 +221,14 @@ function displayFile(li) {
   const full = li.querySelector('.name').value;
   const idx = full.lastIndexOf('.');
   const base = full.slice(0, idx);
-  const ext = full.slice(idx+1);
+  const ext = full.slice(idx + 1);
   li.dataset.ext = ext;
 
   filenameInput.value = '';
   extensionLabel.textContent = '';
   filenameInput.disabled = true;
   preEditor.style.display = 'none';
-  preEditor.setAttribute('contenteditable','false');
+  preEditor.setAttribute('contenteditable', 'false');
   preEditor.className = 'language-none line-numbers';
   waveformCanvas.style.display = 'none';
   audioPlayer.style.display = 'none';
@@ -251,17 +241,18 @@ function displayFile(li) {
     filenameInput.value = full;
     extensionLabel.textContent = '';
     filenameInput.disabled = false;
-    preEditor.setAttribute('contenteditable','true');
+    preEditor.setAttribute('contenteditable', 'true');
     preEditor.className = 'language-' + ext + ' line-numbers';
     preEditor.textContent = li.dataset.content || '';
     preEditor.style.display = 'block';
     Prism.highlightElement(preEditor);
     saveBtn.disabled = false;
     addToTplBtn.style.display = 'inline-block';
-
     preEditor.removeEventListener('input', onEditorInput);
     preEditor.addEventListener('input', onEditorInput);
-  } else if (['mp3','wav','ogg'].includes(ext) && fileBlobs.has(li)) {
+    preEditor.removeEventListener('keydown', onEditorKeydown);
+    preEditor.addEventListener('keydown', onEditorKeydown);
+  } else if (['mp3', 'wav', 'ogg'].includes(ext) && fileBlobs.has(li)) {
     filenameInput.value = base;
     extensionLabel.textContent = '.' + ext;
     filenameInput.disabled = false;
@@ -269,14 +260,14 @@ function displayFile(li) {
     audioPlayer.style.display = 'block';
     drawWaveform(fileBlobs.get(li).url);
     saveBtn.disabled = false;
-  } else if (['mp4','mov','webm'].includes(ext) && fileBlobs.has(li)) {
+  } else if (['mp4', 'mov', 'webm'].includes(ext) && fileBlobs.has(li)) {
     filenameInput.value = base;
     extensionLabel.textContent = '.' + ext;
     filenameInput.disabled = false;
     videoPlayer.src = fileBlobs.get(li).url;
     videoPlayer.style.display = 'block';
     saveBtn.disabled = false;
-  } else if (['png','jpg','jpeg','gif'].includes(ext) && fileBlobs.has(li)) {
+  } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext) && fileBlobs.has(li)) {
     filenameInput.value = base;
     extensionLabel.textContent = '.' + ext;
     filenameInput.disabled = false;
@@ -298,16 +289,14 @@ function getCaretCharacterOffsetWithin(element) {
     const range = sel.getRangeAt(0);
     const preRange = document.createRange();
     preRange.selectNodeContents(element);
-    preRange.setEnd(range.anchorNode, range.anchorOffset);
+    preRange.setEnd(range.startContainer, range.startOffset);
     charCount = preRange.toString().length;
   }
   return charCount;
 }
-
 function setCaretPositionByOffset(element, offset) {
-  let node = element;
   let remaining = offset;
-  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const textNode = walker.currentNode;
     if (textNode.length >= remaining) {
@@ -323,12 +312,18 @@ function setCaretPositionByOffset(element, offset) {
     }
   }
 }
-
 function onEditorInput() {
   const caretOffset = getCaretCharacterOffsetWithin(preEditor);
   Prism.highlightElement(preEditor);
   setCaretPositionByOffset(preEditor, caretOffset);
   lastSaved.content = preEditor.textContent;
+}
+function onEditorKeydown(e) {
+  const caretOffset = getCaretCharacterOffsetWithin(preEditor);
+  setTimeout(() => {
+    Prism.highlightElement(preEditor);
+    setCaretPositionByOffset(preEditor, caretOffset);
+  }, 0);
 }
 
 function drawWaveform(url) {
@@ -345,11 +340,11 @@ function drawWaveform(url) {
       for (let i = 0; i < waveformCanvas.width; i++) {
         let min = 1, max = -1;
         for (let j = 0; j < step; j++) {
-          const v = data[(i*step)+j];
+          const v = data[(i * step) + j];
           if (v < min) min = v;
           if (v > max) max = v;
         }
-        ctx.fillRect(i, (1+min)*amp, 1, Math.max(1, (max-min)*amp));
+        ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
       }
     })
     .catch(() => {});
@@ -365,7 +360,7 @@ function setActiveFolder(li) {
   filenameInput.disabled = true;
   preEditor.textContent = '';
   preEditor.style.display = 'none';
-  preEditor.setAttribute('contenteditable','false');
+  preEditor.setAttribute('contenteditable', 'false');
   waveformCanvas.style.display = 'none';
   audioPlayer.style.display = 'none';
   videoPlayer.style.display = 'none';
@@ -380,8 +375,8 @@ document.addEventListener('mousemove', e => {
   if (!isDragging) return;
   const pct = e.clientX / window.innerWidth * 100;
   if (pct > 10 && pct < 90) {
-    leftPanel.style.width = pct + '%';
-    rightPanel.style.width = (100 - pct) + '%';
+    document.getElementById('leftPanel').style.width = pct + '%';
+    document.getElementById('rightPanel').style.width = (100 - pct) + '%';
   }
 });
 document.addEventListener('mouseup', () => {
